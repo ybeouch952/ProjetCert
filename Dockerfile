@@ -7,9 +7,7 @@ COPY cert_pem.pem /app/
 
 RUN apt-get update && \
     apt-get install -y openssl && \
-    pip install datetime \
-    pip install dnspython \
-    pip install requests
+    pip install datetime dnspython requests
 
 CMD ["python", "main.py"]
 
