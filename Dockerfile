@@ -13,7 +13,7 @@ COPY *.pem /app/
 RUN apt-get update && \
     apt-get install -y openssl && \
     pip install -r requirements.txt && \
-    pip install dnspython
+    pip install dnspython 
 
 # Commande par défaut pour lancer l'application lorsque le conteneur démarre
 CMD ["python", "main.py"]

@@ -3,11 +3,23 @@ import re
 import datetime
 import dns.resolver
 import requests
+import ipaddress
 import os
 
-WEBHOOK_URL = "https://ozitem.webhook.office.com/webhookb2/2a908ece-be53-4a2d-b7e0-4b4b5daa1e92@d59105aa-3408-4b50-8581-e3d9fae3b16b/IncomingWebhook/94dd083241184544a14ffdbece447018/4f44b746-73a5-43f7-af3a-b71481bf08ab"  # Mettre l'URL du webhook Teams
+WEBHOOK_URL = "https://ozitem.webhook.office.com/webhookb2/b1271ec2-8fdd-43c5-abc0-be85566dac59@d59105aa-3408-4b50-8581-e3d9fae3b16b/IncomingWebhook/849214c476fb4670be0f4a03050ec588/4f44b746-73a5-43f7-af3a-b71481bf08ab"
 
-def send_teams_message(message, certificate_name):
+
+clusters = { # Définition des plages d'adresses IP pour chaque cluster
+    "B1": ipaddress.IPv4Network("185.204.105.32/27", strict=False),   
+    "C1": ipaddress.IPv4Network("185.204.105.60/28", strict=False),   
+    "C2": ipaddress.IPv4Network("185.204.105.80/28", strict=False),   
+    "C3": ipaddress.IPv4Network("185.204.105.96/28", strict=False),   
+    "C4": ipaddress.IPv4Network("185.204.105.112/28", strict=False),  
+    "C5": ipaddress.IPv4Network("185.204.105.160/28", strict=False),  
+}
+
+
+def send_teams_message(message, certificate_name): # Envoie un message à un canal Teams via un webhook
     headers = {
         "Content-Type": "application/json"
     }
@@ -20,7 +32,7 @@ def send_teams_message(message, certificate_name):
     except requests.exceptions.RequestException as e:
         print(f"Error sending message to Teams: {e}")
 
-def extract_dates(cert_text):
+def extract_dates(cert_text): # Extrait les dates de validité d'un certificat à partir du texte du certificat
     not_before = re.search(r'notBefore=(.*)', cert_text)
     not_after = re.search(r'notAfter=(.*)', cert_text)
     if not_before and not_after:
@@ -30,14 +42,14 @@ def extract_dates(cert_text):
         )
     raise ValueError("Unable to parse certificate validity period")
 
-def extract_san(cert_text):
+def extract_san(cert_text): # Extrait les Subject Alternative Names (SAN) d'un certificat à partir du texte du certificat
     san_match = re.search(r'X509v3 Subject Alternative Name:(.*)', cert_text, flags=re.DOTALL)
     if san_match:
         san_text = san_match.group(1).strip()
         return re.findall(r'DNS:(.*?)(?:,|$)', san_text)
     return []
 
-def execute_openssl_commands(file_path):
+def execute_openssl_commands(file_path): # Exécute les commandes OpenSSL pour extraire les informations du certificat
     result_dates = subprocess.run(
         ["openssl", "x509", "-noout", "-in", file_path, "-dates", "-text"],
         capture_output=True, text=True
@@ -47,7 +59,7 @@ def execute_openssl_commands(file_path):
     alternative_names = extract_san(cert_text)
     return not_before, not_after, alternative_names
 
-def resolve_domain_to_ip(domain_name):
+def resolve_domain_to_ip(domain_name): # Résout un nom de domaine pour obtenir les adresses IP associées
     domain_name = domain_name.lstrip('*.')
     try:
         resolver = dns.resolver.Resolver()
@@ -57,7 +69,14 @@ def resolve_domain_to_ip(domain_name):
         print(f"Error resolving DNS for {domain_name}: {e}")
     return []
 
-def verify_cert_validity(not_before, not_after, certificate_name):
+def find_cluster(ip): # Détermine dans quel cluster se trouve une adresse IP donnée
+    ip_obj = ipaddress.IPv4Address(ip)
+    for name, network in clusters.items():
+        if ip_obj in network:
+            return name
+    return None
+
+def verify_cert_validity(not_before, not_after, certificate_name): # Vérifie la validité d'un certificat
     now = datetime.datetime.utcnow()
     remaining_days = (not_after - now).days
     print(f"Certificate validity period for {certificate_name}:")
@@ -90,12 +109,13 @@ if __name__ == "__main__":
                 if ips:
                     print(f"    DNS resolved IPs: {', '.join(ips)}")
                     for ip in ips:
-                        if ip.startswith("185.204"):
-                            print(f"    The IP {ip} for domain {name}.")
+                        current_cluster = find_cluster(ip)
+                        if current_cluster:
+                            print(f"    The IP {ip} for domain {name} is in cluster {current_cluster}.")
                         else:
-                            print(f"    The IP {ip} for domain {name} is different.")
+                            print(f"    Unable to determine cluster for IP {ip} and domain {name}.")
                             send_message = True
-                            send_teams_message(f"The IP {ip} for domain {name} is different.", pem_file)
+                            send_teams_message(f"Unable to determine cluster for IP {ip} and domain {name}.", pem_file)
                 else:
                     print(f"    No IP addresses found for {name}.")
                     send_message = True
@@ -109,5 +129,4 @@ if __name__ == "__main__":
         if send_message:
             print("Message sent to Teams.")
         
-        # Add a blank line after processing each certificate
         print("")
