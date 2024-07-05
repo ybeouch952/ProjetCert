@@ -16,3 +16,6 @@ sudo apt-get install openssl
 Utilisation :
 Placez vos fichiers PEM contenant les certificats dans le répertoire du projet. Exécutez ensuite le script principal
 Avant d'exécuter le script, assurez-vous de configurer l'URL du webhook Teams dans le fichier main.py 
+
+Configurez le cluster actuel (current_cluster) dans le fichier main.py :
+current_cluster = "B1"  # Remplacez par le cluster actuel

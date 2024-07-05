@@ -60,6 +60,7 @@ def execute_openssl_commands(file_path): # Exécute les commandes OpenSSL pour e
     return not_before, not_after, alternative_names
 
 def resolve_domain_to_ip(domain_name): # Résout un nom de domaine pour obtenir les adresses IP associées
+
     domain_name = domain_name.lstrip('*.')
     try:
         resolver = dns.resolver.Resolver()
@@ -69,11 +70,17 @@ def resolve_domain_to_ip(domain_name): # Résout un nom de domaine pour obtenir 
         print(f"Error resolving DNS for {domain_name}: {e}")
     return []
 
-def find_cluster(ip): # Détermine dans quel cluster se trouve une adresse IP donnée
+def get_current_cluster():  # Simuler la détermination du cluster actuel
+    current_cluster = "B1"  
+    return current_cluster
+
+def find_cluster(ip, current_cluster): # Détermine dans quel cluster se trouve une adresse IP donnée
     ip_obj = ipaddress.IPv4Address(ip)
     for name, network in clusters.items():
         if ip_obj in network:
-            return name
+            if name != current_cluster:
+                return current_cluster, name  
+            return None  
     return None
 
 def verify_cert_validity(not_before, not_after, certificate_name): # Vérifie la validité d'un certificat
@@ -94,6 +101,8 @@ def verify_cert_validity(not_before, not_after, certificate_name): # Vérifie la
 if __name__ == "__main__":
     pem_files = [file for file in os.listdir() if file.endswith(".pem")]
 
+    current_cluster = get_current_cluster()  # Déterminer le cluster actuel
+
     for pem_file in pem_files:
         print(f"Processing certificate: ./{pem_file}")
         not_before, not_after, alternative_names = execute_openssl_commands(pem_file)
@@ -109,13 +118,13 @@ if __name__ == "__main__":
                 if ips:
                     print(f"    DNS resolved IPs: {', '.join(ips)}")
                     for ip in ips:
-                        current_cluster = find_cluster(ip)
-                        if current_cluster:
-                            print(f"    The IP {ip} for domain {name} is in cluster {current_cluster}.")
-                        else:
-                            print(f"    Unable to determine cluster for IP {ip} and domain {name}.")
+                        cluster_error = find_cluster(ip, current_cluster)
+                        if cluster_error:
+                            print(f"    The IP {ip} for domain {name} is not in the expected cluster {current_cluster}. It is in cluster {cluster_error[1]}.")
                             send_message = True
-                            send_teams_message(f"Unable to determine cluster for IP {ip} and domain {name}.", pem_file)
+                            send_teams_message(f"The IP {ip} for domain {name} is not in the expected cluster {current_cluster}. It is in cluster {cluster_error[1]}.", pem_file)
+                        else:
+                            print(f"    The IP {ip} for domain {name} is in the correct cluster {current_cluster}.")
                 else:
                     print(f"    No IP addresses found for {name}.")
                     send_message = True
@@ -130,3 +139,5 @@ if __name__ == "__main__":
             print("Message sent to Teams.")
         
         print("")
+
+
